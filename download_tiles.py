@@ -20,7 +20,7 @@ def download_modis_tcc_tile(*args, **kwargs):
         except:
             return
     if not inputs_parsed:
-        return
+        return False
 
     z = zoom_level
     x_range = 2**z -1
@@ -33,7 +33,7 @@ def download_modis_tcc_tile(*args, **kwargs):
             if not os.path.exists(output_dirname):
                 print(dir_creat_cmd)
                 os.system(dir_creat_cmd)
-            print(download_cmd)
+            # print(download_cmd)
             os.system(download_cmd)
     return True
 
@@ -48,9 +48,13 @@ def parallel_download(start_date, end_date, zoom_levels, poolSize=4):
         curr_date = curr_date + timedelta(days=1)
     
     with Pool(processes=poolSize) as pool:
-        result = pool.map(download_modis_tcc_tile, input_set)
-        for res in result:
-            pass
+        results = pool.map(download_modis_tcc_tile, input_set)
+        total_inputs = len(input_set)
+        successful_downloads = 0
+        for res in results:
+            if res:
+                successful_downloads = successful_downloads + 1
+        print(f"Download stats: {successful_downloads} completed out of {total_inputs}.")
     return True
 
 
