@@ -1,16 +1,24 @@
 import os
 from datetime import datetime, timedelta
 from multiprocessing import Pool
+import shutil
+import requests
+
+data_download_dir = '/data/modia-tcc-250m-tiles/'
+use_wget = False
 
 def download_modis_tcc_tile(*args, **kwargs):
-    print("Args: ", *args, args[0])
-    print("Kwargs: ", **kwargs)
     curr_date = None
     zoom_level = None
+    verbose = False
     inputs_parsed = False
     try:
-        curr_date = args[0]['curr_date']
-        zoom_level = args[0]['zoom_level']
+        if 'curr_date' in args[0].keys():
+            curr_date = args[0]['curr_date']
+        if 'zoom_level' in args[0].keys():
+            zoom_level = args[0]['zoom_level']
+        if 'verbose' in args[0].keys():
+            verbose = args[0]['verbose']
         inputs_parsed = True
     except:
         try:
@@ -18,23 +26,47 @@ def download_modis_tcc_tile(*args, **kwargs):
            zoom_level = kwargs['zoom_level']
            inputs_parsed = True
         except:
-            return
+            return False
     if not inputs_parsed:
+        print("inputs not parsed")
         return False
 
+    if verbose:
+        print("Args:" *args)
+        print("KWargs:", **kwargs)
+
     z = zoom_level
-    x_range = 2**z -1
-    for x in range(x_range+1):
-        for y in range(x_range+1):
+    #x_range = 2**z -1
+    x_range_dict = {'3': 9, '4': 19, '5': 39 }
+    y_range_dict = {'3': 4, '4':  9, '5': 19 }
+    if z > 5:
+        return False
+    for y in range(y_range_dict[str(z)]+1):
+        for x in range(x_range_dict[str(z)]+1):
             url = f"https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Aqua_CorrectedReflectance_TrueColor/default/{curr_date}/250m/{z}/{y}/{x}.jpg"
-            dir_creat_cmd = f"mkdir -p /data/modia-tcc-250m-tiles/{curr_date}/{z}/{y}/"
-            download_cmd = f"wget {url} -O /data/modia-tcc-250m-tiles/{curr_date}/{z}/{y}/{x}.jpg -o /data/modia-tcc-250m-tiles/{curr_date}/{z}/{y}/{x}-http.log"
-            output_dirname = f"/data/modia-tcc-250m-tiles/{curr_date}/{z}/{y}/"
+            output_dirname = os.path.join(data_download_dir, f"{curr_date}/{z}/{y}/")
+            output_filename = os.path.join(output_dirname, f"{x}.jpg")
+            output_log = os.path.join(output_dirname, f"{x}-http.log")
+            download_cmd = f"wget {url} -O {output_filename} -o {output_log}"
             if not os.path.exists(output_dirname):
-                print(dir_creat_cmd)
-                os.system(dir_creat_cmd)
-            # print(download_cmd)
-            os.system(download_cmd)
+                if verbose:
+                    print(f"Creating directory: {output_dirname}")
+                os.makedirs(output_dirname)
+            if use_wget:
+                if verbose:
+                    print(download_cmd)
+                os.system(download_cmd)
+            else:
+                try:
+                    res = requests.get(url, stream=True)
+                    if res.status_code == 200:
+                        with open(output_filename, "wb") as of:
+                            shutil.copyfileobj(res.raw, of)
+                    else:
+                        print(f"{url} -> status-code: {res.status_code}")
+                except Exception as e:
+                    print(e)
+                    return False
     return True
 
 def parallel_download(start_date, end_date, zoom_levels, poolSize=4):
